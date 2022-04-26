@@ -14,6 +14,10 @@ __declspec(thread) char reflective_pe_thread_local_storage[0x10000];
 namespace ReflectivePE
 {
 
+#ifdef PATCHES
+namespace Patches { void main(); }
+#endif
+
 struct PE
 {
   HMODULE           image;
@@ -83,10 +87,14 @@ void load(std::vector<char> pe)
   memmove(dst.image_nt_headers, src.image_nt_headers, sizeof(IMAGE_NT_HEADERS) + dst.image_nt_headers->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
   VirtualProtect(dst.image_nt_headers, 0x1000, lpfl_old_protect, &lpfl_old_protect);
 
+#ifdef PATCHES
+  Patches::main();
+#endif
+
   reinterpret_cast<FARPROC>(src.image_nt_headers->OptionalHeader.AddressOfEntryPoint + 0x00400000)();
 }
 
-} // ReflectivePE
+} // namespace ReflectivePE
 
 int main(int argc, char* argv[])
 {
