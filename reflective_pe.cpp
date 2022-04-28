@@ -2,10 +2,11 @@
 //! SPDX-License-Identifier: GPL-3.0-or-later
 //! code based on https://github.com/momo5502/open-iw5/blob/master/src/loader/loader.cpp
 
-#if !__has_include("stdafx.hpp")
+#include <Windows.h>
 #include <filesystem>
 #include <fstream>
-#endif // !__has_include("stdafx.hpp")
+
+using namespace std::literals;
 
 #pragma bss_seg      (".reflective_pe")
                    char reflective_pe[0x0A000000];
@@ -13,10 +14,6 @@ __declspec(thread) char reflective_pe_thread_local_storage[0x10000];
 
 namespace ReflectivePE
 {
-
-#ifdef PATCHES
-namespace Patches { void main(); }
-#endif
 
 struct PE
 {
@@ -70,7 +67,7 @@ void load(std::vector<char> pe)
 
       if (!import_descriptor_library)
       {
-        MessageBox(nullptr, (std::stringstream() << "The code execution cannot proceed because " << import_descriptor_name << " was not found. Reinstalling the program may fix this problem.").str().c_str(), "System Error", MB_ICONERROR);
+        MessageBox(nullptr, (std::string("The code execution cannot proceed because") + " " + import_descriptor_name + " " + "was not found. Reinstalling the program may fix this problem.").c_str(), "System Error", MB_ICONERROR);
         std::quick_exit(EXIT_FAILURE);
       }
 
@@ -87,25 +84,19 @@ void load(std::vector<char> pe)
   memmove(dst.image_nt_headers, src.image_nt_headers, sizeof(IMAGE_NT_HEADERS) + dst.image_nt_headers->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
   VirtualProtect(dst.image_nt_headers, 0x1000, lpfl_old_protect, &lpfl_old_protect);
 
-#ifdef PATCHES
-  Patches::main();
-#endif
-
   reinterpret_cast<FARPROC>(src.image_nt_headers->OptionalHeader.AddressOfEntryPoint + 0x00400000)();
 }
 
 } // namespace ReflectivePE
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
   if (argc < 2)
-    return 1;
+    return MessageBox(nullptr, "Please use VS property pages and set the the game's PE absolute path in debugging - Command Arguments.", "Fatal Error", MB_ICONERROR);
 
-  auto fs = std::filesystem::path(argv[1]);
-  auto fs_name = fs.filename();
-  auto fs_relative = fs.parent_path();
+  auto filesystem = std::filesystem::path(argv[1]);
 
-  SetCurrentDirectoryA(fs_relative.string().c_str()); // NOTE: Not foolproof. Some PEs try to read files using an incorrect Cwd independently.
+  SetCurrentDirectoryA(filesystem.parent_path().string().c_str()); // NOTE: Not foolproof. Some PEs try to read files using an incorrect Cwd independently.
   memset(reflective_pe_thread_local_storage, 0, sizeof reflective_pe_thread_local_storage);
-  ReflectivePE::load(std::vector(std::istreambuf_iterator(std::ifstream(fs_name, std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  ReflectivePE::load(std::vector(std::istreambuf_iterator(std::ifstream(filesystem.filename(), std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
