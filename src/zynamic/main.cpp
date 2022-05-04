@@ -1,6 +1,5 @@
 //! @file
 //! SPDX-License-Identifier: GPL-3.0-or-later
-//! code based on https://github.com/momo5502/open-iw5/blob/master/src/loader/loader.cpp
 
 #include <Windows.h>
 #include <filesystem>
@@ -8,11 +7,11 @@
 
 using namespace std::literals;
 
-#pragma bss_seg      (".reflective_pe")
-                   char reflective_pe[0x0A000000];
-__declspec(thread) char reflective_pe_thread_local_storage[0x10000];
+#pragma bss_seg      (".zynamic")
+                   char zynamic[0x0A000000];
+__declspec(thread) char zynamic_thread_local_storage[0x10000];
 
-namespace ReflectivePE
+namespace Zynamic
 {
 
 struct PE
@@ -22,7 +21,7 @@ struct PE
   PIMAGE_NT_HEADERS image_nt_headers;
 };
 
-void load(std::vector<char> pe)
+auto load(std::vector<char> pe)
 {
   PE src{}, dst{};
 
@@ -87,16 +86,16 @@ void load(std::vector<char> pe)
   reinterpret_cast<FARPROC>(src.image_nt_headers->OptionalHeader.AddressOfEntryPoint + 0x00400000)();
 }
 
-} // namespace ReflectivePE
+} // namespace Zynamic
 
-int main(int argc, char *argv[])
+auto main(int argc, char *argv[]) -> int
 {
   if (argc < 2)
-    return MessageBox(nullptr, "Please use VS property pages and set the the game's PE absolute path in debugging - Command Arguments.", "Fatal Error", MB_ICONERROR);
+    return MessageBox(nullptr, "Please set the game executable path in property pages - debugging - command arguments.", "Fatal Error", MB_ICONERROR);
 
   auto filesystem = std::filesystem::path(argv[1]);
 
-  SetCurrentDirectoryA(filesystem.parent_path().string().c_str()); // NOTE: Not foolproof. Some PEs try to read files using an incorrect Cwd independently.
-  memset(reflective_pe_thread_local_storage, 0, sizeof reflective_pe_thread_local_storage);
-  ReflectivePE::load(std::vector(std::istreambuf_iterator(std::ifstream(filesystem.filename(), std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  SetCurrentDirectoryA(filesystem.parent_path().string().c_str());
+  memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
+  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(filesystem.filename(), std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
