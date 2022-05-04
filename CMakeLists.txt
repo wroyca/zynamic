@@ -3,6 +3,8 @@ project(Zynamic LANGUAGES CXX)
 
 option(CMAKE_SUBMODULES "Automatically initialize and update each submodule in the repository." ON)
 option(CMAKE_VCXPROJ_FILTERS "Automatically initialize and create vcxproj.filters files in the repository." ON)
+option(ZYDIS_BUILD_TOOLS "Compile optional Zydis tools" OFF)
+option(ZYDIS_BUILD_EXAMPLES "Compile optional Zydis examples" OFF)
 
 # Automatically initialize and update each submodule in the repository.
 find_package(Git QUIET)
@@ -35,4 +37,6 @@ if ("${CMAKE_BINARY_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
   message(FATAL_ERROR "In-source builds are disabled to avoid cluttering the source tree with generated CMake files. Please create a build subdirectory and use `cmake ..` inside it.\n" "NOTE: You must delete both CMakeCache.txt and CMakeFiles/* before continuing.")
 endif()
 
+add_subdirectory(externals/boost)
+add_subdirectory(externals/zydis)
 add_subdirectory(src)
