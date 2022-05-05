@@ -1,0 +1,21 @@
+# this is a config file for Poxy - a Doxygen + m.css front-end written in Python.
+# https://github.com/marzer/poxy
+
+name                = 'Zynamic'
+author              = 'OpenIW'
+description         = 'Dynamic binary rewriting with Zydis and PDBs.'
+cpp                 = 23
+github              = 'OpenIW/zynamic'
+license             = [ 'GPLv3', 'https://github.com/OpenIW/zynamic/blob/master/LICENSE' ]
+favicon             = 'favicon.png'
+navbar              = [ 'namespaces', 'files' ]
+theme               = 'dark'
+
+[warnings]
+enabled             = true
+undocumented        = true
+treat_as_errors     = false
+
+[sources]
+recursive_paths     = [ '../src' ]
+patterns            = [ '*.h' , '*.cpp' ]
