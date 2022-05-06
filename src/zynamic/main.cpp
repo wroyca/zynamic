@@ -9,15 +9,16 @@
 #include <dia2.h>
 #include <diacreate.h>
 #include <Zydis/Zydis.h>
-#include <boost/bimap.hpp>
 
 #include <fstream>
 #include <filesystem>
+#include <unordered_map>
+#include <optional>
 
 using namespace std::literals;
 
 #pragma bss_seg      (".zynamic")
-                   char zynamic[0x0A000000];
+                   char zynamic[0x0A000000]; // 0x0A000000 may not be enough in the future.
 __declspec(thread) char zynamic_thread_local_storage[0x10000];
 
 namespace Zynamic
@@ -25,10 +26,14 @@ namespace Zynamic
 namespace Dia
 {
 
-using bimap = boost::bimap<std::wstring, unsigned long>;
-using bimap_optional = std::optional<std::reference_wrapper<bimap>>;
-bimap src_symbol_table;
-bimap dst_symbol_table;
+// Linear search is too slow for Zynamic.
+
+template<class T>
+using ref = std::optional<std::reference_wrapper<T>>;
+using rhs = std::unordered_map<unsigned long, std::wstring>;
+using lhs = std::unordered_map<std::wstring, unsigned long>;
+rhs sym_table_src_rhs; // sym_table_dst_rhs
+lhs sym_table_dst_lhs; // sym_table_src_lhs
 
 namespace Zydis
 {
@@ -45,10 +50,13 @@ enum class Operand
   Register,
 };
 
-auto ZydisBind(const unsigned long address, unsigned char* destination)
+auto ZydisBind(const unsigned long address, unsigned char *destination) -> void
 {
   auto page_protection = 0ul;
   auto instruction = reinterpret_cast<unsigned char*>(address);
+
+  if (*instruction != 0xE8)
+    return;
 
   VirtualProtect(reinterpret_cast<void*>(address), 5, PAGE_EXECUTE_READWRITE, &page_protection);
   reinterpret_cast<unsigned long*>(instruction + 1)[0] = reinterpret_cast<unsigned long>(destination) - reinterpret_cast<unsigned long>(instruction + 5);
@@ -82,16 +90,14 @@ auto ZydisDecodeAbsolute(const ZydisFormatter *formatter, ZydisFormatterBuffer *
   ZyanU64 address;
   ZYAN_CHECK(ZydisCalcAbsoluteAddress(context->instruction, context->operand, context->runtime_address, &address));
 
-  if (context->instruction->mnemonic == ZYDIS_MNEMONIC_CALL)
-  {
-    if (src_symbol_table.right.count(address))
-    {
-      if (const auto &name = src_symbol_table.right.at(address); dst_symbol_table.left.count(name))
-      {
-        ZydisBind(static_cast<unsigned long>(ZydisRuntimeAddress), reinterpret_cast<unsigned char*>(dst_symbol_table.left.at(name)));
-      }
-    }
-  }
+  if (context->instruction->mnemonic != ZYDIS_MNEMONIC_CALL)
+    return ZydisDecodeAbsoluteHook(formatter, buffer, context);
+
+  if (!sym_table_src_rhs.count(address))
+    return ZydisDecodeAbsoluteHook(formatter, buffer, context);
+
+  if (const auto& name = sym_table_src_rhs.at(address); sym_table_dst_lhs.count(name))
+    ZydisBind(static_cast<unsigned long>(ZydisRuntimeAddress), reinterpret_cast<unsigned char*>(sym_table_dst_lhs.at(name)));
 
   return ZydisDecodeAbsoluteHook(formatter, buffer, context);
 }
@@ -160,8 +166,8 @@ auto load()
 {
   PDB src{}, dst{};
 
-  src.dia = L"demo.pdb";
-  dst.dia = L"Zynamic.pdb";
+  src.dia = L"iw4mp.pdb";
+  dst.dia = L"OpenIW.pdb";
 
   auto get_global_scope = [](PDB &pdb)
   {
@@ -178,12 +184,12 @@ auto load()
     }
     catch (const _com_error &e)
     {
-      MessageBoxA(nullptr, e.ErrorMessage(), "Zynamic - Fatal Error", MB_ICONERROR);
+      MessageBoxA(nullptr, e.ErrorMessage(), "Fatal Error", MB_ICONERROR);
       std::quick_exit(EXIT_FAILURE);
     }
   };
 
-  auto map_global_scope = [](const PDB &pdb, const enum SymTagEnum sym_tag, bimap_optional bimap = std::nullopt)
+  auto map_global_scope = [](const PDB &pdb, const enum SymTagEnum sym_tag, ref<rhs> rhs = std::nullopt, ref<lhs> lhs = std::nullopt)
   {
     CComPtr<IDiaSymbol> children;
     CComPtr<IDiaEnumSymbols> enum_children;
@@ -194,10 +200,11 @@ auto load()
     while (SUCCEEDED(enum_children->Next(1, &children, &celt)) && celt == 1)
     {
       wchar_t *name = L"";
-      children->get_name(&name);
       unsigned long rva = 0;
-      children->get_relativeVirtualAddress(&rva);
       unsigned long long length = 0;
+
+      children->get_name(&name);
+      children->get_relativeVirtualAddress(&rva);
       children->get_length(&length);
 
       // It's possible for get_name to return an empty string, so
@@ -205,7 +212,9 @@ auto load()
       if (wcscmp(name, L"") != 0)
       {
         rva += 0x00400000;
-        bimap.has_value() ? bimap.value().get().insert({name, rva}) : ZydisDecode(rva, static_cast<ZyanUSize>(length), Zydis::Operand::Absolute);
+        rhs.has_value() ? rhs.value().get().insert({ rva, name }) :
+        lhs.has_value() ? lhs.value().get().insert({ name, rva }) :
+        ZydisDecode(rva, static_cast<ZyanUSize>(length), Zydis::Operand::Absolute);
         SysFreeString(name);
       }
       children.Release();
@@ -213,13 +222,13 @@ auto load()
     enum_children.Release();
   };
 
-  // Second pass on the lambda for performance gain.
+  // Second pass on the lambda with Zydis
   auto dec_global_scope = map_global_scope;
 
   get_global_scope(src);
   get_global_scope(dst);
-  map_global_scope(src, SymTagPublicSymbol, src_symbol_table);
-  map_global_scope(dst, SymTagFunction,     dst_symbol_table);
+  map_global_scope(src, SymTagPublicSymbol, sym_table_src_rhs);
+  map_global_scope(dst, SymTagFunction, std::nullopt, sym_table_dst_lhs);
   dec_global_scope(src, SymTagPublicSymbol);
 }
 
@@ -292,6 +301,7 @@ auto load(std::vector<char> pe)
   VirtualProtect(dst.image_nt_headers, 0x1000, PAGE_EXECUTE_READWRITE, &image_nt_headers_page_protection);
   dst.image_nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT] = src.image_nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
   memmove(dst.image_nt_headers, src.image_nt_headers, sizeof(IMAGE_NT_HEADERS) + dst.image_nt_headers->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
+  VirtualProtect(dst.image_nt_headers, 0x1000, image_nt_headers_page_protection, &image_nt_headers_page_protection);
 
   Dia::load();
   reinterpret_cast<FARPROC>(src.image_nt_headers->OptionalHeader.AddressOfEntryPoint + 0x00400000)();
@@ -301,7 +311,29 @@ auto load(std::vector<char> pe)
 
 auto main(int argc, char *argv[]) -> int
 {
-  SetCurrentDirectory("C:/demo"); // NOTE: Zynamic PDB output must be placed in the same directory.
+  // For this one scenario where a pre-build is required, we want to
+  // dynamically handle SetCurrentDirectory if Steam is not
+  // installed on the C drive.
+  auto drives_bitmask = GetLogicalDrives();
+  auto cwd = "C:/Program Files (x86)/Steam/steamapps/common/Call of Duty Modern Warfare 2/"s;
+  for (auto drive = 'A'; drive <= 'Z'; ++drive, drives_bitmask >>= 1, cwd = std::string(1, drive) + ":/steam/steamapps/common/Call of Duty Modern Warfare 2/"s) {
+    if ((drives_bitmask & 1) == 0 && std::filesystem::exists(cwd))
+      break;
+  }
+
+  if (!std::filesystem::exists(cwd))
+    return MessageBox(nullptr, "Call of Duty: Modern Warfare 2 must be installed from Steam to run this application.", "Fatal Error", MB_ICONERROR);
+
+  if (!std::filesystem::exists(cwd + "OpenIW.exe"))
+    return MessageBox(nullptr, "OpenIW.exe must be in Call of Duty: Modern Warfare 2 directory.", "Fatal Error", MB_ICONERROR);
+
+  if (!std::filesystem::exists(cwd + "OpenIW.pdb"))
+    return MessageBox(nullptr, "OpenIW.pdb must be in Call of Duty: Modern Warfare 2 directory.", "Fatal Error", MB_ICONERROR);
+
+  if (!std::filesystem::exists(cwd + "iw4mp.pdb"))
+    return MessageBox(nullptr, "iw4mp.pdb must be available in Call of Duty: Modern Warfare 2 directory.", "Fatal Error", MB_ICONERROR);
+
+  SetCurrentDirectory(cwd.c_str());
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
-  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream("demo.exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream("iw4mp.exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
