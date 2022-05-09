@@ -6,12 +6,12 @@ add_library(Zynamic STATIC
 
 target_include_directories(Zynamic
 PRIVATE
-  "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/include"
+  "${VS}/DIA SDK/include"
 )
 
 target_link_directories(Zynamic
 PUBLIC
-  "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/lib"
+  "${VS}/DIA SDK/lib"
 )
 
 target_link_libraries(Zynamic
@@ -25,6 +25,7 @@ PRIVATE
   -DAPP=\"${ZYNAMIC_APP}\"
   -DSRC=L"${ZYNAMIC_SRC}"s
   -DDST=L"${CMAKE_PROJECT_NAME}"s
+  -DDIA=L"${VS}/DIA SDK/bin/msdia140.dll"
 )
 
 target_vcxproj_filters(Zynamic)

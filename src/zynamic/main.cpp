@@ -18,7 +18,7 @@
 using namespace std::literals;
 
 #pragma bss_seg      (".zynamic")
-                   char zynamic[0x0A000000]; // 0x0A000000 may not be enough in the future.
+                   char zynamic[0x0A000000 * 2]; // 0x0A000000 * 2 may not be enough in the future.
 __declspec(thread) char zynamic_thread_local_storage[0x10000];
 
 namespace Zynamic
@@ -176,7 +176,7 @@ auto load()
   {
     try
     {
-      if (const auto hr = NoRegCoCreate(L"C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/bin/msdia140.dll", CLSID_DiaSource, IID_IDiaDataSource, reinterpret_cast<void**>(&pdb.dia_data_source)); FAILED(hr))
+      if (const auto hr = NoRegCoCreate(DIA, CLSID_DiaSource, IID_IDiaDataSource, reinterpret_cast<void**>(&pdb.dia_data_source)); FAILED(hr))
         _com_issue_error(hr);
       if (const auto hr = pdb.dia_data_source->loadDataFromPdb(pdb.dia.c_str()); FAILED(hr))
         _com_issue_error(hr);
