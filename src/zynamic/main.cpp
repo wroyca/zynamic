@@ -26,14 +26,15 @@ namespace Zynamic
 namespace Dia
 {
 
+template<class T>
+using as_ref = std::optional<std::reference_wrapper<T>>;
+
 // Linear search is too slow for Zynamic.
 
-template<class T>
-using ref = std::optional<std::reference_wrapper<T>>;
-using rhs = std::unordered_map<unsigned long, std::wstring>;
-using lhs = std::unordered_map<std::wstring, unsigned long>;
-rhs sym_table_src_rhs; // sym_table_dst_rhs
-lhs sym_table_dst_lhs; // sym_table_src_lhs
+using unordered_map = std::unordered_map<unsigned long, std::wstring>;
+using unordered_map_reverse = std::unordered_map<std::wstring, unsigned long>;
+      unordered_map get_src_symbol_by_address;
+      unordered_map_reverse get_dst_symbol_by_name;
 
 namespace Zydis
 {
@@ -93,11 +94,11 @@ auto ZydisDecodeAbsolute(const ZydisFormatter *formatter, ZydisFormatterBuffer *
   if (context->instruction->mnemonic != ZYDIS_MNEMONIC_CALL)
     return ZydisDecodeAbsoluteHook(formatter, buffer, context);
 
-  if (!sym_table_src_rhs.count(address))
+  if (!get_src_symbol_by_address.count(address))
     return ZydisDecodeAbsoluteHook(formatter, buffer, context);
 
-  if (const auto& name = sym_table_src_rhs.at(address); sym_table_dst_lhs.count(name))
-    ZydisBind(static_cast<unsigned long>(ZydisRuntimeAddress), reinterpret_cast<unsigned char*>(sym_table_dst_lhs.at(name)));
+  if (const auto& name = get_src_symbol_by_address.at(address); get_dst_symbol_by_name.count(name))
+    ZydisBind(static_cast<unsigned long>(ZydisRuntimeAddress), reinterpret_cast<unsigned char*>(get_dst_symbol_by_name.at(name)));
 
   return ZydisDecodeAbsoluteHook(formatter, buffer, context);
 }
@@ -166,8 +167,8 @@ auto load()
 {
   PDB src{}, dst{};
 
-  src.dia = L"iw4mp.pdb";
-  dst.dia = L"OpenIW.pdb";
+  src.dia = SRC + L".pdb";
+  dst.dia = DST + L".pdb";
 
   auto get_global_scope = [](PDB &pdb)
   {
@@ -189,7 +190,7 @@ auto load()
     }
   };
 
-  auto map_global_scope = [](const PDB &pdb, const enum SymTagEnum sym_tag, ref<rhs> rhs = std::nullopt, ref<lhs> lhs = std::nullopt)
+  auto map_global_scope = [](const PDB &pdb, const enum SymTagEnum sym_tag, as_ref<unordered_map> rhs = std::nullopt, as_ref<unordered_map_reverse> lhs = std::nullopt)
   {
     CComPtr<IDiaSymbol> children;
     CComPtr<IDiaEnumSymbols> enum_children;
@@ -227,8 +228,8 @@ auto load()
 
   get_global_scope(src);
   get_global_scope(dst);
-  map_global_scope(src, SymTagPublicSymbol, sym_table_src_rhs);
-  map_global_scope(dst, SymTagFunction, std::nullopt, sym_table_dst_lhs);
+  map_global_scope(src, SymTagPublicSymbol, get_src_symbol_by_address);
+  map_global_scope(dst, SymTagFunction, std::nullopt, get_dst_symbol_by_name);
   dec_global_scope(src, SymTagPublicSymbol);
 }
 
@@ -311,29 +312,21 @@ auto load(std::vector<char> pe)
 
 auto main(int argc, char *argv[]) -> int
 {
-  // For this one scenario where a pre-build is required, we want to
-  // dynamically handle SetCurrentDirectory if Steam is not
-  // installed on the C drive.
   auto drives_bitmask = GetLogicalDrives();
-  auto cwd = "C:/Program Files (x86)/Steam/steamapps/common/Call of Duty Modern Warfare 2/"s;
-  for (auto drive = 'A'; drive <= 'Z'; ++drive, drives_bitmask >>= 1, cwd = std::string(1, drive) + ":/steam/steamapps/common/Call of Duty Modern Warfare 2/"s) {
-    if ((drives_bitmask & 1) == 0 && std::filesystem::exists(cwd))
+  auto steam = "C:/Program Files (x86)/Steam/steamapps/common/"s;
+
+  for (auto drive = 'A'; drive <= 'Z'; ++drive, drives_bitmask >>= 1, steam = std::string(1, drive) + ":/steam/steamapps/common/"s) {
+    if ((drives_bitmask & 1) == 0 && std::filesystem::exists(steam))
       break;
   }
 
-  if (!std::filesystem::exists(cwd))
-    return MessageBox(nullptr, "Call of Duty: Modern Warfare 2 must be installed from Steam to run this application.", "Fatal Error", MB_ICONERROR);
+  if (!std::filesystem::exists(steam))
+    return MessageBox(nullptr, "Steam must be installed to run this application.", "Fatal Error", MB_ICONERROR);
 
-  if (!std::filesystem::exists(cwd + "OpenIW.exe"))
-    return MessageBox(nullptr, "OpenIW.exe must be in Call of Duty: Modern Warfare 2 directory.", "Fatal Error", MB_ICONERROR);
+  if (!std::filesystem::exists(steam + APP))
+    return MessageBox(nullptr, APP " must be installed to run this application.", "Fatal Error", MB_ICONERROR);
 
-  if (!std::filesystem::exists(cwd + "OpenIW.pdb"))
-    return MessageBox(nullptr, "OpenIW.pdb must be in Call of Duty: Modern Warfare 2 directory.", "Fatal Error", MB_ICONERROR);
-
-  if (!std::filesystem::exists(cwd + "iw4mp.pdb"))
-    return MessageBox(nullptr, "iw4mp.pdb must be available in Call of Duty: Modern Warfare 2 directory.", "Fatal Error", MB_ICONERROR);
-
-  SetCurrentDirectory(cwd.c_str());
+  SetCurrentDirectory(std::string(steam + APP).c_str());
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
-  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream("iw4mp.exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(SRC + L".exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }

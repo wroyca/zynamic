@@ -5,7 +5,7 @@ add_library(Zynamic STATIC
 )
 
 target_include_directories(Zynamic
-PUBLIC .
+PRIVATE
   "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/include"
 )
 
@@ -20,4 +20,11 @@ PUBLIC
   Zydis
 )
 
-target_create_vcxproj_filters(Zynamic)
+target_compile_definitions(Zynamic
+PRIVATE
+  -DAPP=\"${ZYNAMIC_APP}\"
+  -DSRC=L"${ZYNAMIC_SRC}"s
+  -DDST=L"${CMAKE_PROJECT_NAME}"s
+)
+
+target_vcxproj_filters(Zynamic)
