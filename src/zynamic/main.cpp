@@ -39,6 +39,8 @@ using unordered_map_reverse = std::unordered_map<std::wstring, unsigned long>;
 namespace Zydis
 {
 
+#define OPCODE_CALL 0xE8
+
 ZydisFormatterFunc ZydisDecodeAbsoluteHook;
 ZydisFormatterFunc ZydisDecodeImmediateHook;
 ZydisFormatterFunc ZydisDecodeRegisterHook;
@@ -54,13 +56,13 @@ enum class Operand
 auto ZydisBind(const unsigned long address, unsigned char *destination) -> void
 {
   auto page_protection = 0ul;
-  auto instruction = reinterpret_cast<unsigned char*>(address);
+  auto opcode = reinterpret_cast<unsigned char*>(address);
 
-  if (*instruction != 0xE8)
+  if (*opcode != OPCODE_CALL)
     return;
 
   VirtualProtect(reinterpret_cast<void*>(address), 5, PAGE_EXECUTE_READWRITE, &page_protection);
-  reinterpret_cast<unsigned long*>(instruction + 1)[0] = reinterpret_cast<unsigned long>(destination) - reinterpret_cast<unsigned long>(instruction + 5);
+  reinterpret_cast<unsigned long*>(opcode + 1)[0] = reinterpret_cast<unsigned long>(destination) - reinterpret_cast<unsigned long>(opcode + 5);
   VirtualProtect(reinterpret_cast<void*>(address), 5, page_protection, &page_protection);
 
   FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address), 5);
@@ -208,9 +210,15 @@ auto load()
       children->get_relativeVirtualAddress(&rva);
       children->get_length(&length);
 
-      // It's possible for get_name to return an empty string, so
-      // special-case that.
-      if (wcscmp(name, L"") != 0)
+      // It's possible for get_name to return an empty string or a
+      // reserved symbol, so special-case that.
+      auto keywords = { L"std::"s, L"atexit"s, L"operator"s, L"_s"s, L"~"s };
+      auto reserved = std::any_of(std::begin(keywords), std::end(keywords), [&](const std::wstring& keyword)
+      {
+        return std::wstring(name).find(keyword) != std::string::npos;
+      });
+
+      if (wcscmp(name, L"") != 0 && !reserved)
       {
         rva += 0x00400000;
         rhs.has_value() ? rhs.value().get().insert({ rva, name }) :
@@ -315,6 +323,7 @@ auto main(int argc, char *argv[]) -> int
   auto drives_bitmask = GetLogicalDrives();
   auto steam = "C:/Program Files (x86)/Steam/steamapps/common/"s;
 
+  // Iterate through logical drives if Steam is not on the C drive.
   for (auto drive = 'A'; drive <= 'Z'; ++drive, drives_bitmask >>= 1, steam = std::string(1, drive) + ":/steam/steamapps/common/"s) {
     if ((drives_bitmask & 1) == 0 && std::filesystem::exists(steam))
       break;
