@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(Zynamic LANGUAGES CXX)
 
+set(MASTER_PROJECT OFF)
+# Determine if we're built as a subproject (using add_subdirectory)
+# or if this is the master project.
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(MASTER_PROJECT ON)
+endif()
+
 option(CMAKE_SUBMODULES "Initialize submodules in the repository." ON)
 option(CMAKE_VCXPROJ_FILTERS "Initialize vcxproj.filters in the solution." ON)
 option(ZYDIS_BUILD_TOOLS "Compile optional Zydis tools" OFF)
