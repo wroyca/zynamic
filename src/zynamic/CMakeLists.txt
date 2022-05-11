@@ -22,8 +22,7 @@ PUBLIC
 
 target_compile_definitions(Zynamic
 PRIVATE
-  -DAPP=\"${ZYNAMIC_APP}\"
-  -DSRC=L"${ZYNAMIC_SRC}"s
+  -DBIN=L"${ZYNAMIC_BIN}"s
   -DDST=L"${CMAKE_PROJECT_NAME}"s
   -DDIA=L"${VS}/DIA SDK/bin/msdia140.dll"
 )

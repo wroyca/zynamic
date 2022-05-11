@@ -169,7 +169,7 @@ auto load()
 {
   PDB src{}, dst{};
 
-  src.dia = SRC + L".pdb";
+  src.dia = BIN + L".pdb";
   dst.dia = DST + L".pdb";
 
   auto get_global_scope = [](PDB &pdb)
@@ -321,5 +321,5 @@ auto load(std::vector<char> pe)
 auto main(int argc, char *argv[]) -> int
 {
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
-  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(SRC + L".exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(BIN + L".exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
