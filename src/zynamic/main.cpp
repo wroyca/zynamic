@@ -320,22 +320,6 @@ auto load(std::vector<char> pe)
 
 auto main(int argc, char *argv[]) -> int
 {
-  auto drives_bitmask = GetLogicalDrives();
-  auto steam = "C:/Program Files (x86)/Steam/steamapps/common/"s;
-
-  // Iterate through logical drives if Steam is not on the C drive.
-  for (auto drive = 'A'; drive <= 'Z'; ++drive, drives_bitmask >>= 1, steam = std::string(1, drive) + ":/steam/steamapps/common/"s) {
-    if ((drives_bitmask & 1) == 0 && std::filesystem::exists(steam))
-      break;
-  }
-
-  if (!std::filesystem::exists(steam))
-    return MessageBox(nullptr, "Steam must be installed to run this application.", "Fatal Error", MB_ICONERROR);
-
-  if (!std::filesystem::exists(steam + APP))
-    return MessageBox(nullptr, APP " must be installed to run this application.", "Fatal Error", MB_ICONERROR);
-
-  SetCurrentDirectory(std::string(steam + APP).c_str());
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
   Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(SRC + L".exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
