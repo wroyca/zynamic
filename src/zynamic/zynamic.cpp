@@ -11,8 +11,9 @@
 
 #include <fstream>
 #include <filesystem>
-#include <unordered_map>
 #include <optional>
+
+#include <zynamic/zynamic.hpp>
 
 using namespace std::literals;
 
@@ -30,10 +31,8 @@ using as_ref = std::optional<std::reference_wrapper<T>>;
 
 // Linear search is too slow for Zynamic.
 
-using unordered_map = std::unordered_map<unsigned long, std::wstring>;
-using unordered_map_reverse = std::unordered_map<std::wstring, unsigned long>;
-      unordered_map get_src_symbol_by_address;
-      unordered_map_reverse get_dst_symbol_by_name;
+unordered_map get_src_symbol_by_address, get_dst_symbol_by_address;
+unordered_map_reverse get_src_symbol_by_name, get_dst_symbol_by_name;
 
 namespace Zydis
 {
@@ -228,6 +227,11 @@ auto load()
     }
   };
 
+  //
+  // Dia lookup is not consistent, so we cache the symbols
+  // information in a map to avoid potential problems.
+  //
+
   auto map_global_scope = [](const PDB& pdb, const enum SymTagEnum sym_tag, as_ref<unordered_map> rhs = std::nullopt, as_ref<unordered_map_reverse> lhs = std::nullopt)
   {
     CComPtr<IDiaSymbol> children;
@@ -246,8 +250,11 @@ auto load()
       children->get_relativeVirtualAddress(&rva);
       children->get_length(&length);
 
-      // It's possible for get_name to return an empty string or a
-      // reserved symbol, so special-case that.
+      //
+      // It is possible that get_name returns an empty string or a
+      // reserved symbol. So we create a special set of rules to
+      // filter the problematic ones.
+      //
       auto keywords = { L"std::"s, L"atexit"s, L"operator"s, L"_s"s, L"~"s };
       auto reserved = std::any_of(std::begin(keywords), std::end(keywords), [&](const std::wstring& keyword)
       {
@@ -273,6 +280,8 @@ auto load()
   get_global_scope(src);
   get_global_scope(dst);
   map_global_scope(src, SymTagPublicSymbol, get_src_symbol_by_address);
+  map_global_scope(dst, SymTagFunction, get_dst_symbol_by_address);
+  map_global_scope(src, SymTagPublicSymbol, std::nullopt, get_src_symbol_by_name);
   map_global_scope(dst, SymTagFunction, std::nullopt, get_dst_symbol_by_name);
   dec_global_scope(src, SymTagPublicSymbol);
 }
