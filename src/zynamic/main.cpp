@@ -1,4 +1,3 @@
-//! @file
 //! SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <Windows.h>
@@ -53,42 +52,59 @@ enum class Operand
   Register,
 };
 
-auto ZydisBind(const unsigned long address, unsigned char *destination) -> void
+//!
+//! @brief Swap the address of a call procedure.
+//!
+//! @param source The calling procedure address in the source binary.
+//! @param destination The calling procedure address in the loaded binary.
+//!
+auto ZydisBind(const unsigned long source, unsigned char* destination) -> void
 {
   auto page_protection = 0ul;
-  auto opcode = reinterpret_cast<unsigned char*>(address);
+  auto opcode = reinterpret_cast<unsigned char*>(source);
 
   if (*opcode != OPCODE_CALL)
-    return;
+    throw;
 
-  VirtualProtect(reinterpret_cast<void*>(address), 5, PAGE_EXECUTE_READWRITE, &page_protection);
+  VirtualProtect(reinterpret_cast<void*>(source), 5, PAGE_EXECUTE_READWRITE, &page_protection);
   reinterpret_cast<unsigned long*>(opcode + 1)[0] = reinterpret_cast<unsigned long>(destination) - reinterpret_cast<unsigned long>(opcode + 5);
-  VirtualProtect(reinterpret_cast<void*>(address), 5, page_protection, &page_protection);
-
-  FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address), 5);
+  VirtualProtect(reinterpret_cast<void*>(source), 5, page_protection, &page_protection);
+  FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(source), 5);
 }
 
-auto ZydisBind(const unsigned long runtime, const unsigned long address, unsigned long destination)
+//!
+//! @brief Swap the address of a global data.
+//!
+//! @param source The global data address in the source binary.
+//! @param destination The global data address in the loaded binary.
+//! @param zydis_extended_instruction_pointer The extended instruction pointer address during the decoding procedure.
+//!
+auto ZydisBind(const unsigned long source, unsigned long destination, const unsigned long zydis_extended_instruction_pointer)
 {
-  auto ZydisBind = [](const unsigned long address, unsigned char* destination, const unsigned long length)
+  auto ZydisBind = [](const unsigned long source, unsigned char* destination, const unsigned long length)
   {
     auto page_protection = 0ul;
-
-    VirtualProtect(reinterpret_cast<void*>(address), length, PAGE_EXECUTE_READWRITE, &page_protection);
-    for (auto i = 0ul; i < 4; i++) *reinterpret_cast<volatile unsigned char*>(address + i) = *destination++;
-    VirtualProtect(reinterpret_cast<void*>(address), length, page_protection, &page_protection);
-
-    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address), length);
+    VirtualProtect(reinterpret_cast<void*>(source), length, PAGE_EXECUTE_READWRITE, &page_protection);
+    for (auto i = 0ul; i < 4; i++) *reinterpret_cast<volatile unsigned char*>(source + i) = *destination++;
+    VirtualProtect(reinterpret_cast<void*>(source), length, page_protection, &page_protection);
+    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(source), length);
   };
 
+  // Increment Zydis EIP until the bytes of the next instructions to
+  // be decoded match our global address.
   for (auto i = 0; i < 6; i++)
   {
-    if (*reinterpret_cast<unsigned long*>(runtime + i) == address)
-      return ZydisBind(runtime + i, reinterpret_cast<unsigned char*>(&destination), 4);
+    if (*reinterpret_cast<unsigned long*>(zydis_extended_instruction_pointer + i) == source)
+      return ZydisBind(zydis_extended_instruction_pointer + i, reinterpret_cast<unsigned char*>(&destination), 4);
   }
 }
 
-auto ZydisDecodeAbsolute(const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context) -> ZyanStatus
+//!
+//! @brief Parse the absolute operand during the decoding procedure
+//!
+//! @remark Only ZYDIS_MNEMONIC_CALL is processed for the moment. Others will come later.
+//!
+auto ZydisDecodeAbsolute(const ZydisFormatter* formatter, ZydisFormatterBuffer* buffer, ZydisFormatterContext* context) -> ZyanStatus
 {
   ZyanU64 address;
   ZYAN_CHECK(ZydisCalcAbsoluteAddress(context->instruction, context->operand, context->runtime_address, &address));
@@ -105,16 +121,33 @@ auto ZydisDecodeAbsolute(const ZydisFormatter *formatter, ZydisFormatterBuffer *
   return ZydisDecodeAbsoluteHook(formatter, buffer, context);
 }
 
-auto ZydisDecodeImmediate(const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context) -> ZyanStatus
+//!
+//! @brief Parse the immediate operand during the decoding procedure
+//!
+//! @warning This is in progress and is not yet available.
+//!
+auto ZydisDecodeImmediate(const ZydisFormatter* formatter, ZydisFormatterBuffer* buffer, ZydisFormatterContext* context) -> ZyanStatus
 {
   return ZydisDecodeImmediateHook(formatter, buffer, context);
 }
 
-auto ZydisDecodeRegister(const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context) -> ZyanStatus
+//!
+//! @brief Parse the register operand during the decoding procedure
+//!
+//! @warning This is in progress and is not yet available.
+//!
+auto ZydisDecodeRegister(const ZydisFormatter* formatter, ZydisFormatterBuffer* buffer, ZydisFormatterContext* context) -> ZyanStatus
 {
   return ZydisDecodeRegisterHook(formatter, buffer, context);
 }
 
+//!
+//! @brief Decodes the received symbol.
+//!
+//! @param address The symbol location.
+//! @param length  The symbol length.
+//! @param operand The operand to be parsed from the symbol during the decoding procedure.
+//!
 auto ZydisDecode(ZyanU64 address, ZyanUSize length, Operand operand)
 {
   ZydisDecoder decoder;
@@ -125,21 +158,21 @@ auto ZydisDecode(ZyanU64 address, ZyanUSize length, Operand operand)
 
   switch (operand)
   {
-    case Operand::Absolute:
-      ZydisDecodeAbsoluteHook = &ZydisDecodeAbsolute;
-      ZydisFormatterSetHook(&formatter, ZYDIS_FORMATTER_FUNC_PRINT_ADDRESS_ABS, (const void**)&ZydisDecodeAbsoluteHook);
-      break;
-    case Operand::Immediate:
-      ZydisDecodeImmediateHook = &ZydisDecodeImmediate;
-      ZydisFormatterSetHook(&formatter, ZYDIS_FORMATTER_FUNC_PRINT_ADDRESS_ABS, (const void**)&ZydisDecodeImmediateHook);
-      break;
-    case Operand::Register:
-      ZydisDecodeRegisterHook = &ZydisDecodeRegister;
-      ZydisFormatterSetHook(&formatter, ZYDIS_FORMATTER_FUNC_PRINT_ADDRESS_ABS, (const void**)&ZydisDecodeRegisterHook);
-      break;
+  case Operand::Absolute:
+    ZydisDecodeAbsoluteHook = &ZydisDecodeAbsolute;
+    ZydisFormatterSetHook(&formatter, ZYDIS_FORMATTER_FUNC_PRINT_ADDRESS_ABS, (const void**)&ZydisDecodeAbsoluteHook);
+    break;
+  case Operand::Immediate:
+    ZydisDecodeImmediateHook = &ZydisDecodeImmediate;
+    ZydisFormatterSetHook(&formatter, ZYDIS_FORMATTER_FUNC_PRINT_ADDRESS_ABS, (const void**)&ZydisDecodeImmediateHook);
+    break;
+  case Operand::Register:
+    ZydisDecodeRegisterHook = &ZydisDecodeRegister;
+    ZydisFormatterSetHook(&formatter, ZYDIS_FORMATTER_FUNC_PRINT_ADDRESS_ABS, (const void**)&ZydisDecodeRegisterHook);
+    break;
   }
 
-  ZyanU8 *data = reinterpret_cast<unsigned char*>(address);
+  ZyanU8* data = reinterpret_cast<unsigned char*>(address);
   ZyanU64 runtime_address = address;
   ZyanUSize offset = 0;
   ZydisDecodedInstruction instruction;
@@ -165,6 +198,9 @@ struct PDB
   CComPtr<IDiaSymbol>     dia_symbol;
 };
 
+//!
+//! @brief Cache the symbols from the PDBs and forward them to Zydis decoder.
+//!
 auto load()
 {
   PDB src{}, dst{};
@@ -172,7 +208,7 @@ auto load()
   src.dia = BIN + L".pdb";
   dst.dia = DST + L".pdb";
 
-  auto get_global_scope = [](PDB &pdb)
+  auto get_global_scope = [](PDB& pdb)
   {
     try
     {
@@ -185,14 +221,14 @@ auto load()
       if (const auto hr = pdb.dia_session->get_globalScope(&pdb.dia_symbol); FAILED(hr))
         _com_issue_error(hr);
     }
-    catch (const _com_error &e)
+    catch (const _com_error& e)
     {
       MessageBoxA(nullptr, e.ErrorMessage(), "Fatal Error", MB_ICONERROR);
       std::quick_exit(EXIT_FAILURE);
     }
   };
 
-  auto map_global_scope = [](const PDB &pdb, const enum SymTagEnum sym_tag, as_ref<unordered_map> rhs = std::nullopt, as_ref<unordered_map_reverse> lhs = std::nullopt)
+  auto map_global_scope = [](const PDB& pdb, const enum SymTagEnum sym_tag, as_ref<unordered_map> rhs = std::nullopt, as_ref<unordered_map_reverse> lhs = std::nullopt)
   {
     CComPtr<IDiaSymbol> children;
     CComPtr<IDiaEnumSymbols> enum_children;
@@ -202,7 +238,7 @@ auto load()
 
     while (SUCCEEDED(enum_children->Next(1, &children, &celt)) && celt == 1)
     {
-      wchar_t *name = L"";
+      wchar_t* name = L"";
       unsigned long rva = 0;
       unsigned long long length = 0;
 
@@ -250,6 +286,12 @@ struct PE
   PIMAGE_NT_HEADERS image_nt_headers;
 };
 
+//!
+//! @brief Mimics how the Windows Loader maps a PE into memory.
+//!
+//! Each section and imports are mapped into memory at a relative
+//! address that is dictated by the PE header.
+//!
 auto load(std::vector<char> pe)
 {
   PE src{}, dst{};
@@ -318,7 +360,10 @@ auto load(std::vector<char> pe)
 
 } // namespace Zynamic
 
-auto main(int argc, char *argv[]) -> int
+//!
+//! @brief Provides a version of main() which performs some initialization before calling the loaded binary entry point.
+//!
+auto main() -> int
 {
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
   Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(BIN + L".exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
