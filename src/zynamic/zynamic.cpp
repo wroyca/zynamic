@@ -350,7 +350,7 @@ auto load(std::vector<char> pe)
 
       if (!import_descriptor_library)
       {
-        MessageBox(nullptr, (std::string("The code execution cannot proceed because") + " " + import_descriptor_name + " " + "was not found.").c_str(), "Fatal Error", MB_ICONERROR);
+        MessageBoxA(nullptr, (std::string("The code execution cannot proceed because") + " " + import_descriptor_name + " " + "was not found.").c_str(), "Fatal Error", MB_ICONERROR);
         std::quick_exit(EXIT_FAILURE);
       }
 
