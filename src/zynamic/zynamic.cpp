@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <optional>
 
+#include <format>
+
 #include <zynamic/zynamic.hpp>
 
 using namespace std::literals;
@@ -350,7 +352,7 @@ auto load(std::vector<char> pe)
 
       if (!import_descriptor_library)
       {
-        MessageBoxA(nullptr, (std::string("The code execution cannot proceed because") + " " + import_descriptor_name + " " + "was not found.").c_str(), "Fatal Error", MB_ICONERROR);
+        MessageBoxA(nullptr, ("The code execution cannot proceed because "s + import_descriptor_name + " was not found."s).c_str(), "Fatal Error", MB_ICONERROR);
         std::quick_exit(EXIT_FAILURE);
       }
 
@@ -379,5 +381,5 @@ auto load(std::vector<char> pe)
 auto main() -> int
 {
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
-  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(BIN + L".exe", std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(BIN + L".exe"s, std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
