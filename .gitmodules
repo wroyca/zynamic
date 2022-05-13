@@ -1,3 +1,0 @@
-[submodule "externals/zydis"]
-	path = externals/zydis
-	url = https://github.com/zyantific/zydis.git
