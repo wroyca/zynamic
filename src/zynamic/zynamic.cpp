@@ -277,6 +277,10 @@ auto load()
   // Second pass on the lambda with Zydis
   auto dec_global_scope = map_global_scope;
 
+  #ifndef FAKE_PDB
+  #define SymTagPublicSymbol SymTagFunction // FakePDB currently only supports SymTagPublicSymbol.
+  #endif
+
   get_global_scope(src);
   get_global_scope(dst);
   map_global_scope(src, SymTagPublicSymbol, get_src_symbol_by_address);
