@@ -13,8 +13,6 @@
 #include <filesystem>
 #include <optional>
 
-#include <format>
-
 #include <zynamic/zynamic.hpp>
 
 using namespace std::literals;
@@ -206,8 +204,8 @@ auto load()
 {
   PDB src{}, dst{};
 
-  src.dia = BIN + L".pdb";
-  dst.dia = DST + L".pdb";
+  src.dia = BIN + L".pdb"s;
+  dst.dia = DST + L".pdb"s;
 
   auto get_global_scope = [](PDB& pdb)
   {
