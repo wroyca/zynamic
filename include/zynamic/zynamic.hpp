@@ -19,7 +19,14 @@ extern unordered_map_reverse get_src_symbol_by_name, get_dst_symbol_by_name;
 template <typename T>
 std::function<T> Forward(const wchar_t* name)
 {
-  return std::function<T>(reinterpret_cast<T*>(Dia::get_src_symbol_by_name.at(name)));
+  if (Dia::get_src_symbol_by_name.count(name))
+    return std::function<T>(reinterpret_cast<T*>(Dia::get_src_symbol_by_name.at(name)));
+}
+
+template <typename T>
+std::function<T> Forward(std::uintptr_t address)
+{
+  return std::function<T>(reinterpret_cast<T*>(address));
 }
 
 } // namespace Zynamic
