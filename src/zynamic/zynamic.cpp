@@ -373,6 +373,11 @@ auto load(std::vector<char> pe)
   VirtualProtect(dst.image_nt_headers, 0x1000, image_nt_headers_page_protection, &image_nt_headers_page_protection);
 
   Dia::load();
+
+  #if defined(FAKE_PDB) && defined(ZYNAMIC_PATCH)
+    void ZynamicPatch(); ZynamicPatch(); // HACK for some exceptional rare cases where WinMain is not called with certain IDB using FakePDB.
+  #endif
+
   reinterpret_cast<FARPROC>(src.image_nt_headers->OptionalHeader.AddressOfEntryPoint + 0x00400000)();
 }
 
