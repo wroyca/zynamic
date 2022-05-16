@@ -255,8 +255,9 @@ auto load()
       // reserved symbol. So we create a special set of rules to
       // filter the problematic ones.
       //
-      auto keywords = { L"std::"s, L"atexit"s, L"operator"s, L"__"s, L"~"s };
-
+      // TODO: Regex?
+      //
+      auto keywords = { L"std::"s, L"atexit"s, L"operator"s, L"__"s, L"~"s, L"@"s, L"?"s };
       auto reserved = std::any_of(std::begin(keywords), std::end(keywords), [&](const std::wstring& keyword)
       {
         return std::wstring(name).find(keyword) != std::string::npos;
