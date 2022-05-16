@@ -63,7 +63,7 @@ auto ZydisBind(const unsigned long source, unsigned char* destination) -> void
   auto opcode = reinterpret_cast<unsigned char*>(source);
 
   if (*opcode != OPCODE_CALL)
-    throw;
+    return;
 
   VirtualProtect(reinterpret_cast<void*>(source), 5, PAGE_EXECUTE_READWRITE, &page_protection);
   reinterpret_cast<unsigned long*>(opcode + 1)[0] = reinterpret_cast<unsigned long>(destination) - reinterpret_cast<unsigned long>(opcode + 5);
