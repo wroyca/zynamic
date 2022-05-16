@@ -255,14 +255,18 @@ auto load()
       // reserved symbol. So we create a special set of rules to
       // filter the problematic ones.
       //
-      auto keywords = { L"std::"s, L"atexit"s, L"operator"s, L"_s"s, L"~"s };
+      auto keywords = { L"std::"s, L"atexit"s, L"operator"s, L"__"s, L"~"s };
+
       auto reserved = std::any_of(std::begin(keywords), std::end(keywords), [&](const std::wstring& keyword)
       {
         return std::wstring(name).find(keyword) != std::string::npos;
       });
 
-      if (wcscmp(name, L"") != 0 && !reserved)
+      if (wcscmp(name, L"") != 0 && !reserved && name[0] != '_')
       {
+        #ifdef    _ZYDEBUG
+        OutputDebugStringW((std::wstring(name) + L"\n"s).c_str());
+        #endif // _ZYDEBUG
         rva += 0x00400000;
         rhs.has_value() ? rhs.value().get().insert({ rva, name }) :
         lhs.has_value() ? lhs.value().get().insert({ name, rva }) :
