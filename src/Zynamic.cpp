@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <optional>
 
-#include <zynamic/zynamic.hpp>
+#include <Zynamic/Zynamic>
 
 using namespace std::literals;
 

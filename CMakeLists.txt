@@ -6,17 +6,5 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(MASTER_PROJECT ON)
 endif()
 
-option(ZYDIS_BUILD_TOOLS "Compile optional Zydis tools" OFF)
-option(ZYDIS_BUILD_EXAMPLES "Compile optional Zydis examples" OFF)
-
-# Locate Visual Studio installation.
-find_program(_vswhere_tool NAMES vswhere PATHS "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer")
-if (NOT ${vswhere})
-  message(FATAL_ERROR "Could not locate vswhere.exe - unable to source vc redistributable")
-endif()
-execute_process(COMMAND "${_vswhere_tool}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath OUTPUT_VARIABLE _vs_install_loc_out RESULT_VARIABLE _vs_where_exitcode OUTPUT_STRIP_TRAILING_WHITESPACE)
-file(TO_CMAKE_PATH "${_vs_install_loc_out}" _vs_install_loc)
-string(REPLACE "\\" "/" VS "${_vs_install_loc_out}")
-
-add_subdirectory(src)
 add_subdirectory(externals)
+add_subdirectory(src)
