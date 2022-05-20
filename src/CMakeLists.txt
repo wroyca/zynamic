@@ -26,7 +26,7 @@ PRIVATE
 )
 
 target_link_directories(Zynamic
-PRIVATE
+PUBLIC
   "${VS}/DIA SDK/lib"
 )
 
