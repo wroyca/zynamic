@@ -299,38 +299,38 @@ auto load()
 
 struct PE
 {
-  HMODULE           image;
-  PIMAGE_DOS_HEADER image_dos_header;
-  PIMAGE_NT_HEADERS image_nt_headers;
+  HMODULE               image;
+  PIMAGE_DOS_HEADER     image_dos_header;
+  PIMAGE_NT_HEADERS     image_nt_headers;
+  PIMAGE_SECTION_HEADER image_section_header;
 };
 
 //!
-//! @brief Mimics how the Windows Loader maps a PE into memory.
+//! @brief Run Windows PE in the same address space as the host process.
 //!
 //! Each section and imports are mapped into memory at a relative
 //! address that is dictated by the PE header.
 //!
-auto load(std::vector<char> pe)
+auto run(std::vector<char> pe)
 {
   PE src{}, dst{};
 
   src.image = reinterpret_cast<HMODULE>(&pe.at(0));
   src.image_dos_header = reinterpret_cast<PIMAGE_DOS_HEADER>(src.image);
   src.image_nt_headers = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<unsigned>(src.image) + src.image_dos_header->e_lfanew);
+  src.image_section_header = IMAGE_FIRST_SECTION(src.image_nt_headers);
   dst.image = GetModuleHandleA(nullptr);
   dst.image_dos_header = reinterpret_cast<PIMAGE_DOS_HEADER>(dst.image);
   dst.image_nt_headers = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<unsigned>(dst.image) + dst.image_dos_header->e_lfanew);
 
-  auto section = IMAGE_FIRST_SECTION(src.image_nt_headers);
-
-  for (auto i = 0; i < src.image_nt_headers->FileHeader.NumberOfSections; ++i, ++section)
+  for (auto i = 0; i < src.image_nt_headers->FileHeader.NumberOfSections; ++i, ++src.image_section_header)
   {
-    if (!section || section->SizeOfRawData <= 0)
+    if (!src.image_section_header || src.image_section_header->SizeOfRawData <= 0)
       continue;
 
-    auto section_virtual_address = reinterpret_cast<void*>(reinterpret_cast<unsigned>(dst.image) + section->VirtualAddress);
-    auto section_raw_data = reinterpret_cast<void*>(reinterpret_cast<unsigned>(src.image) + section->PointerToRawData);
-    auto section_raw_data_size = (std::min)(section->SizeOfRawData, section->Misc.VirtualSize);
+    auto section_virtual_address = reinterpret_cast<void*>(reinterpret_cast<unsigned>(dst.image) + src.image_section_header->VirtualAddress);
+    auto section_raw_data = reinterpret_cast<void*>(reinterpret_cast<unsigned>(src.image) + src.image_section_header->PointerToRawData);
+    auto section_raw_data_size = (std::min)(src.image_section_header->SizeOfRawData, src.image_section_header->Misc.VirtualSize);
     auto section_page_protection = 0ul;
 
     VirtualProtect(section_virtual_address, section_raw_data_size, PAGE_EXECUTE_READWRITE, &section_page_protection);
@@ -341,17 +341,17 @@ auto load(std::vector<char> pe)
   auto import_directory = &src.image_nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
   auto import_descriptor = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(reinterpret_cast<unsigned>(dst.image) + import_directory->VirtualAddress);
 
-  while (import_descriptor->Name)
+  for (;import_descriptor->Name; import_descriptor++)
   {
     auto import_descriptor_name = reinterpret_cast<char*>(reinterpret_cast<unsigned>(dst.image) + import_descriptor->Name);
-    auto import_descriptor_first_thunk = reinterpret_cast<unsigned*>(reinterpret_cast<unsigned>(dst.image) + import_descriptor->FirstThunk);
-    auto import_descriptor_original_first_thunk = reinterpret_cast<unsigned*>(reinterpret_cast<unsigned>(dst.image) + import_descriptor->OriginalFirstThunk);
+    auto import_descriptor_first_thunk = reinterpret_cast<PIMAGE_THUNK_DATA>(reinterpret_cast<unsigned>(dst.image) + import_descriptor->FirstThunk);
+    auto import_descriptor_original_first_thunk = import_descriptor->OriginalFirstThunk ? reinterpret_cast<PIMAGE_THUNK_DATA>(reinterpret_cast<unsigned>(dst.image) + import_descriptor->OriginalFirstThunk) : import_descriptor_first_thunk;
 
-    while (*import_descriptor_original_first_thunk)
+    for (;import_descriptor_original_first_thunk->u1.AddressOfData; import_descriptor_original_first_thunk++, import_descriptor_first_thunk++)
     {
       auto import_descriptor_library = LoadLibraryA(import_descriptor_name);
-      auto import_descriptor_lookup_table = reinterpret_cast<PIMAGE_IMPORT_BY_NAME>(reinterpret_cast<unsigned>(dst.image) + *import_descriptor_original_first_thunk);
-      auto import_descriptor_address_table = IMAGE_SNAP_BY_ORDINAL(*import_descriptor_original_first_thunk) ? GetProcAddress(import_descriptor_library, MAKEINTRESOURCEA(IMAGE_ORDINAL(*import_descriptor_original_first_thunk))) : GetProcAddress(import_descriptor_library, &import_descriptor_lookup_table->Name[0]);
+      auto import_descriptor_import_by_name = reinterpret_cast<PIMAGE_IMPORT_BY_NAME>(reinterpret_cast<unsigned>(dst.image) + import_descriptor_original_first_thunk->u1.AddressOfData);
+      auto import_descriptor_function = IMAGE_SNAP_BY_ORDINAL(import_descriptor_original_first_thunk->u1.Ordinal) ? GetProcAddress(import_descriptor_library, MAKEINTRESOURCEA(IMAGE_ORDINAL(import_descriptor_original_first_thunk->u1.Ordinal))) : GetProcAddress(import_descriptor_library, reinterpret_cast<LPCSTR>(&import_descriptor_import_by_name->Name));
 
       if (!import_descriptor_library)
       {
@@ -359,18 +359,15 @@ auto load(std::vector<char> pe)
         std::quick_exit(EXIT_FAILURE);
       }
 
-     *import_descriptor_first_thunk = reinterpret_cast<unsigned>(import_descriptor_address_table);
-      import_descriptor_first_thunk++;
-      import_descriptor_original_first_thunk++;
+      import_descriptor_first_thunk->u1.Function = reinterpret_cast<unsigned long>(import_descriptor_function);
     }
-    import_descriptor++;
   }
 
-  auto image_nt_headers_page_protection = 0ul;
-  VirtualProtect(dst.image_nt_headers, 0x1000, PAGE_EXECUTE_READWRITE, &image_nt_headers_page_protection);
+  auto nt_headers_page_protection = 0ul;
+  VirtualProtect(dst.image_nt_headers, 0x1000, PAGE_EXECUTE_READWRITE, &nt_headers_page_protection);
   dst.image_nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT] = src.image_nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
   memmove(dst.image_nt_headers, src.image_nt_headers, sizeof(IMAGE_NT_HEADERS) + dst.image_nt_headers->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
-  VirtualProtect(dst.image_nt_headers, 0x1000, image_nt_headers_page_protection, &image_nt_headers_page_protection);
+  VirtualProtect(dst.image_nt_headers, 0x1000, nt_headers_page_protection, &nt_headers_page_protection);
 
   Dia::load();
 
@@ -389,5 +386,5 @@ auto load(std::vector<char> pe)
 auto main() -> int
 {
   memset(zynamic_thread_local_storage, 0, sizeof zynamic_thread_local_storage);
-  Zynamic::load(std::vector(std::istreambuf_iterator(std::ifstream(BIN + L".exe"s, std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
+  Zynamic::run(std::vector(std::istreambuf_iterator(std::ifstream(BIN + L".exe"s, std::ios::binary).rdbuf()), std::istreambuf_iterator<char>()));
 }
