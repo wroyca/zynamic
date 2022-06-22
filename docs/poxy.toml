@@ -2,17 +2,11 @@
 # https://github.com/marzer/poxy
 
 name            = 'Zynamic'
-author          = 'Zynamic'
+author          = 'wroyca'
 github          = 'wroyca/Zynamic'
-description     = 'Dynamic binary rewriting with Zydis.'
 favicon         = 'favicon.png'
-license         = [ 'GPLv3', 'https://github.com/wroyca/Zynamic/blob/master/LICENSE' ]
+license         = [ 'GPLv3', 'https://github.com/wroyca/Zynamic/blob/main/LICENSE' ]
 navbar          = [ 'files' ]
-
-[warnings]
-enabled         = true
-undocumented    = true
-treat_as_errors = false
 
 [sources]
 recursive_paths = [ '../src' ]
