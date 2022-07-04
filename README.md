@@ -1,3 +1,5 @@
+# Zynamic has been renamed to [Orca](https://github.com/orca-repos). This repository will no longer see contributions. 
+
 # Zynamic
 Zynamic uses Zydis, Microsoft PDB and Reflective PE loading to automatically substitute symbols in a given binary at runtime.
 
