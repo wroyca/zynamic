@@ -1,4 +1,4 @@
-A# Zynamic
+# Zynamic
 
 Zynamic was a dynamic binary rewriting tool that automatically substituted the *( hijacked, detioured )* symbols of a given binary at runtime with Reflective PE loading and Microsoft PDB. Rather than creating a midhook, it swapped the addresses (location) of the symbols in the target with those in the project using Zynamic by finding the same symbol by name in both debugging formats (target, project using Zynamic). 
 
